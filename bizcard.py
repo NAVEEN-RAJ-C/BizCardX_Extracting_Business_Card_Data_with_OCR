@@ -4,9 +4,20 @@ import easyocr
 from PIL import Image, ImageFilter
 from numpy import asarray
 import re
+import mysql.connector
+import io
 
 # easyOCR reader language is set to english
 reader = easyocr.Reader(['en'])
+
+# Connect to the MySQL database
+conn = mysql.connector.connect(host='localhost',
+                               user='root',
+                               password='pw',
+                               database="bizcard")
+
+# Create a cursor object to interact with the database
+cursor = conn.cursor()
 
 
 # function to split the image
@@ -117,8 +128,8 @@ def extract_business_card_text(image):
             city, state, pin_code = segregate_info(details_right)
     # details are structures in the form of dictionary
     details_tag = dict(Company_Name=company_name, Card_Holder_Name=card_holder_name, Designation=designation,
-                       Mobile_Number=' '.join(mobile_number), E_mail=email_address, Site='.'.join(website_url),
-                       Area=area, City=city, State_or_UT=state, PIN=pin_code)
+                       Mobile_Number=' '.join(mobile_number), E_mail=email_address, Website='.'.join(website_url),
+                       Area=area, City=city, State_or_UT=state, PIN=int(pin_code))
 
     return details_tag
 
@@ -139,11 +150,37 @@ def main():
     if st.button('Extract text from the uploaded Business Card') and biz_card:
         with st.spinner("Extracting text..."):
             details_tag = extract_business_card_text(img)
+            st.session_state.details = details_tag
         st.spinner()  # Hide the spinner
         st.success('Extracted text from the Business Card image successfully')
         st.write('Details of the Business Card')
         # displaying the extracted text
+        st.image(biz_card)
         st.write(details_tag)
+    if 'details' in st.session_state:
+        if st.button('Store the extracted information into SQL database'):
+            # Create a BytesIO object to hold binary data
+            image_binary = io.BytesIO()
+
+            # Save the image to the BytesIO object as binary data
+            img.save(image_binary, format='PNG')  # Use the appropriate image format
+
+            details_tag = st.session_state.details
+            # Get the binary data as bytes
+            binary_data = image_binary.getvalue()
+            details = list(details_tag.values())
+            st.write(details)
+            details.append(binary_data)
+            details = tuple(details)
+
+            insert_query = 'INSERT INTO details VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'
+            cursor.execute(insert_query, details)
+            conn.commit()
+            st.success('Stored the extracted information into SQL database')
+    if st.button('Clear SQL table'):
+        cursor.execute('delete from details')
+        conn.commit()
+        st.write('SQL table cleared')
 
 
 if __name__ == '__main__':
