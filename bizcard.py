@@ -6,6 +6,7 @@ from numpy import asarray
 import re
 import mysql.connector
 import io
+import pandas as pd
 
 # easyOCR reader language is set to english
 reader = easyocr.Reader(['en'])
@@ -126,10 +127,19 @@ def extract_business_card_text(image):
         company_name = " ".join(details_left)
         card_holder_name, designation, mobile_number, email_address, website_url, area, \
             city, state, pin_code = segregate_info(details_right)
+
+    # Create a BytesIO object to hold binary data
+    image_binary = io.BytesIO()
+
+    # Save the image to the BytesIO object as binary data
+    image.save(image_binary, format='PNG')  # Use the appropriate image format
+    # Get the binary data as bytes
+    binary_data = image_binary.getvalue()
+
     # details are structures in the form of dictionary
     details_tag = dict(Company_Name=company_name, Card_Holder_Name=card_holder_name, Designation=designation,
                        Mobile_Number=' '.join(mobile_number), E_mail=email_address, Website='.'.join(website_url),
-                       Area=area, City=city, State_or_UT=state, PIN=int(pin_code))
+                       Area=area, City=city, State_or_UT=state, PIN=int(pin_code), Business_Card=binary_data)
 
     return details_tag
 
@@ -137,6 +147,8 @@ def extract_business_card_text(image):
 # main function to run streamlit
 def main():
     img = ''
+    if 'details' not in st.session_state:
+        st.session_state.details = []
     st.set_page_config(page_title='Extracting Business Card with OCR', layout='wide')
     st.title('BizCardX: Extracting Business Card Data with OCR')
     # Upload the Business Card image
@@ -150,31 +162,30 @@ def main():
     if st.button('Extract text from the uploaded Business Card') and biz_card:
         with st.spinner("Extracting text..."):
             details_tag = extract_business_card_text(img)
-            st.session_state.details = details_tag
+            st.session_state.details.append(details_tag)
+            details_df = pd.DataFrame(st.session_state.details)
+            st.session_state.details_df = details_df
+            st.session_state.details_df.drop_duplicates(inplace=True)
         st.spinner()  # Hide the spinner
         st.success('Extracted text from the Business Card image successfully')
         st.write('Details of the Business Card')
         # displaying the extracted text
         st.image(biz_card)
         st.write(details_tag)
+        st.dataframe(st.session_state.details_df)
     if 'details' in st.session_state:
         if st.button('Store the extracted information into SQL database'):
-            # Create a BytesIO object to hold binary data
-            image_binary = io.BytesIO()
 
-            # Save the image to the BytesIO object as binary data
-            img.save(image_binary, format='PNG')  # Use the appropriate image format
+            details_df = st.session_state.details_df
 
-            details_tag = st.session_state.details
-            # Get the binary data as bytes
-            binary_data = image_binary.getvalue()
-            details = list(details_tag.values())
-            st.write(details)
-            details.append(binary_data)
-            details = tuple(details)
+            for row in details_df.itertuples(index=False):
+                details = (row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10])
 
-            insert_query = 'INSERT INTO details VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'
-            cursor.execute(insert_query, details)
+                insert_query = 'INSERT INTO details VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'
+                try:
+                    cursor.execute(insert_query, details)
+                except mysql.connector.IntegrityError:
+                    continue
             conn.commit()
             st.success('Stored the extracted information into SQL database')
     if st.button('Clear SQL table'):
