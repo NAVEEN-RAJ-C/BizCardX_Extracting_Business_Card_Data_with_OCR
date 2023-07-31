@@ -151,47 +151,100 @@ def main():
         st.session_state.details = []
     st.set_page_config(page_title='Extracting Business Card with OCR', layout='wide')
     st.title('BizCardX: Extracting Business Card Data with OCR')
-    # Upload the Business Card image
-    biz_card = st.file_uploader(label='Upload a Business Card', type='png')
-    if biz_card is not None:
-        # opening the image using pillow
-        img = Image.open(biz_card)
-        # sharpening the image
-        img = img.filter(ImageFilter.SHARPEN)
-    # Button to trigger the text extraction process
-    if st.button('Extract text from the uploaded Business Card') and biz_card:
-        with st.spinner("Extracting text..."):
-            details_tag = extract_business_card_text(img)
-            st.session_state.details.append(details_tag)
-            details_df = pd.DataFrame(st.session_state.details)
-            st.session_state.details_df = details_df
-            st.session_state.details_df.drop_duplicates(inplace=True)
-        st.spinner()  # Hide the spinner
-        st.success('Extracted text from the Business Card image successfully')
-        st.write('Details of the Business Card')
-        # displaying the extracted text
-        st.image(biz_card)
-        st.write(details_tag)
-        st.dataframe(st.session_state.details_df)
-    if 'details' in st.session_state:
-        if st.button('Store the extracted information into SQL database'):
+    c1, c2 = st.columns(2)
+    with c1:
+        st.header('Uploading Image | Extracting Text | Storing in SQL')
+        # Upload the Business Card image
+        biz_card = st.file_uploader(label='Upload a Business Card', type='png')
+        if biz_card is not None:
+            # opening the image using pillow
+            img = Image.open(biz_card)
+            # sharpening the image
+            img = img.filter(ImageFilter.SHARPEN)
+        # Button to trigger the text extraction process
+        if st.button('Extract text from the uploaded Business Card') and biz_card:
+            with st.spinner("Extracting text..."):
+                details_tag = extract_business_card_text(img)
+                st.session_state.details.append(details_tag)
+                details_df = pd.DataFrame(st.session_state.details)
+                st.session_state.details_df = details_df
+                st.session_state.details_df.drop_duplicates(inplace=True)
+            st.spinner()  # Hide the spinner
+            st.success('Extracted text from the Business Card image successfully')
+            st.write('Details of the Business Card')
+            # displaying the extracted text
+            st.image(biz_card, caption="Uploaded Business Card", width=252, use_column_width=False)
+            st.write(details_tag)
+            st.dataframe(st.session_state.details_df)
+        if 'details' in st.session_state:
+            if st.button('Store the extracted information into SQL database'):
 
-            details_df = st.session_state.details_df
+                details_df = st.session_state.details_df
 
-            for row in details_df.itertuples(index=False):
-                details = (row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10])
+                for row in details_df.itertuples(index=False):
+                    details = (row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10])
 
-                insert_query = 'INSERT INTO details VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'
-                try:
-                    cursor.execute(insert_query, details)
-                except mysql.connector.IntegrityError:
-                    continue
+                    insert_query = 'INSERT INTO details VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)'
+                    try:
+                        cursor.execute(insert_query, details)
+                    except mysql.connector.IntegrityError:
+                        continue
+                conn.commit()
+                st.success('Stored the extracted information into SQL database')
+    # column for modifying details stored in SQL table
+    with c2:
+        st.header('Modifying details in SQL')
+        # To show details stored in SQL table
+        if st.button('Show the details stored in SQL Database'):
+            st.subheader('Details stored in SQL Database')
+            query = 'select * from details'
+            # reading SQL query using pandas
+            query_df = pd.read_sql_query(query, conn)
+            # Showing details stored in SQL table as dataframe
+            st.dataframe(query_df)
+        cursor.execute('select card_holder_name from details')
+        card_holder_rows = cursor.fetchall()
+        if card_holder_rows:
+            # list of cardholders
+            card_holders = [row[0] for row in card_holder_rows]
+            st.subheader('Select a card holder whose details are to be updated')
+            # selection of a cardholder name to modify her or his details
+            card_holder = st.selectbox('Selecta card holder', card_holders)
+            st.session_state.card_holder = card_holder
+            # list of details
+            details_list = ['Company_Name', 'Card_Holder_Name', 'Designation', 'Mobile_Number', 'E_mail', 'Website',
+                            'Area', 'City', 'State_or_UT', 'PIN']
+            # Multiselect widget to select the details to be changed
+            change_details = st.multiselect('select the details to be changed', details_list)
+            st.session_state.change_details = change_details
+
+        if st.session_state.change_details:
+            # Dictionary to store the new values entered by the user
+            if 'new_values_dict' not in st.session_state:
+                st.session_state.new_values_dict = {}
+
+            # Create text boxes dynamically based on selected details and store the new values in the dictionary
+            if st.session_state.change_details:
+                for detail in st.session_state.change_details:
+                    new_value = st.text_input(f'Enter new value to be updated for {detail}')
+                    st.session_state.new_values_dict[detail] = new_value
+            # Update the table with the new values
+            if st.button('Update the values') and st.session_state.new_values_dict:
+                for detail, new_value in st.session_state.new_values_dict.items():
+                    # SQL UPDATE query
+                    update_query = f"UPDATE details SET {detail} = %s WHERE Card_Holder_Name = %s"
+
+                    # Execute the UPDATE query with the new value
+                    cursor.execute(update_query, (new_value, st.session_state.card_holder))
+
+                # Commit the changes to the database
+                conn.commit()
+                st.success('Details updated successfully')
+
+        if st.button('Clear SQL table'):
+            cursor.execute('delete from details')
             conn.commit()
-            st.success('Stored the extracted information into SQL database')
-    if st.button('Clear SQL table'):
-        cursor.execute('delete from details')
-        conn.commit()
-        st.write('SQL table cleared')
+            st.write('SQL table cleared')
 
 
 if __name__ == '__main__':
