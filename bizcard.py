@@ -150,12 +150,17 @@ def main():
     if 'details' not in st.session_state:
         st.session_state.details = []
     st.set_page_config(page_title='Extracting Business Card with OCR', layout='wide')
-    st.title('BizCardX: Extracting Business Card Data with OCR')
+    st.markdown("<h1 style='text-align: center; font-size: 50px; '>BizCardX: Extracting Business Card Data with "
+                "OCR</h1>", unsafe_allow_html=True)
+    # Use st.markdown with HTML to create a horizontal line
+    st.markdown("<hr style='border: 1px solid #ddd;'>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
-        st.header('Uploading Image | Extracting Text | Storing in SQL')
+        st.markdown("<h2 style='text-align: center; font-size: 25px;'>Uploading Image | Extracting Text | Storing in "
+                    "SQL</h2>", unsafe_allow_html=True)
+        st.write("")
         # Upload the Business Card image
-        biz_card = st.file_uploader(label='Upload a Business Card', type='png')
+        biz_card = st.file_uploader(label='UPLOAD A BUSINESS CARD', type='png')
         if biz_card is not None:
             # opening the image using pillow
             img = Image.open(biz_card)
@@ -171,7 +176,7 @@ def main():
                 st.session_state.details_df.drop_duplicates(inplace=True)
             st.spinner()  # Hide the spinner
             st.success('Extracted text from the Business Card image successfully')
-            st.write('Details of the Business Card')
+            st.write('DETAILS OF THE BUSINESS CARD')
             # displaying the extracted text
             st.image(biz_card, caption="Uploaded Business Card", width=252, use_column_width=False)
             st.write(details_tag)
@@ -191,31 +196,40 @@ def main():
                         continue
                 conn.commit()
                 st.success('Stored the extracted information into SQL database')
+
+    # Add the vertical line between the columns
+    c1.markdown("<div class='vertical-line'></div>", unsafe_allow_html=True)
+
     # column for modifying details stored in SQL table
     with c2:
-        st.header('Modifying details in SQL')
-        # To show details stored in SQL table
-        if st.button('Show the details stored in SQL Database'):
-            st.subheader('Details stored in SQL Database')
+        st.markdown("<h2 style='text-align: center; font-size: 25px;'>Modifying details in SQL</h2>",
+                    unsafe_allow_html=True)
+        st.write("")
+
+        if st.button('Show SQL table'):
+            # To show details stored in SQL table
+            st.write('DETAILS STORED IN SQL DATABASE')
             query = 'select * from details'
             # reading SQL query using pandas
             query_df = pd.read_sql_query(query, conn)
             # Showing details stored in SQL table as dataframe
             st.dataframe(query_df)
+
+        # fetching the cardholder names stored in SQL table
         cursor.execute('select card_holder_name from details')
         card_holder_rows = cursor.fetchall()
         if card_holder_rows:
             # list of cardholders
             card_holders = [row[0] for row in card_holder_rows]
-            st.subheader('Select a card holder whose details are to be updated')
             # selection of a cardholder name to modify her or his details
-            card_holder = st.selectbox('Selecta card holder', card_holders)
+            card_holder = st.selectbox('SELECT A CARD HOLDER WHOSE DETAILS ARE TO BE UPDATED', ['None'] + card_holders,
+                                       index=0)
             st.session_state.card_holder = card_holder
             # list of details
             details_list = ['Company_Name', 'Card_Holder_Name', 'Designation', 'Mobile_Number', 'E_mail', 'Website',
                             'Area', 'City', 'State_or_UT', 'PIN']
             # Multiselect widget to select the details to be changed
-            change_details = st.multiselect('select the details to be changed', details_list)
+            change_details = st.multiselect('SELECT THE DETAILS TO BE CHANGED', details_list, default=[])
             st.session_state.change_details = change_details
 
         if st.session_state.change_details:
@@ -241,7 +255,28 @@ def main():
                 conn.commit()
                 st.success('Details updated successfully')
 
-        if st.button('Clear SQL table'):
+        st.markdown("<h2 style='text-align: center; font-size: 25px;'>Removing card holder details from SQL table</h2>",
+                    unsafe_allow_html=True)
+        st.write("")
+        if card_holder_rows:
+            # list of cardholders
+            card_holders_to_remove = [row[0] for row in card_holder_rows]
+            # selection of a cardholder name to modify her or his details
+            card_holder_name_to_remove = st.selectbox('SELECT A CARD HOLDER WHOSE DETAILS ARE TO BE REMOVED',
+                                                      ['None'] + card_holders_to_remove, index=0)
+        if st.button('Remove') and card_holder_name_to_remove:
+            # Execute the DELETE query
+            delete_query = f"DELETE FROM details WHERE Card_Holder_Name = '{card_holder_name_to_remove}'"
+            cursor.execute(delete_query)
+
+            # Commit the changes
+            conn.commit()
+            st.success(f'{card_holder_name_to_remove}\'s details removed successfully')
+
+        st.markdown("<h2 style='text-align: center; font-size: 25px;'>To clear the entire SQL table</h2>",
+                    unsafe_allow_html=True)
+        st.write("")
+        if st.button('Click here to clear the table'):
             cursor.execute('delete from details')
             conn.commit()
             st.write('SQL table cleared')
