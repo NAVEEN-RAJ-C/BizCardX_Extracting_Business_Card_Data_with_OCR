@@ -169,23 +169,30 @@ def main():
         # Button to trigger the text extraction process
         if st.button('Extract text from the uploaded Business Card') and biz_card:
             with st.spinner("Extracting text..."):
+                # function call to extract text from image
                 details_tag = extract_business_card_text(img)
+                # appending details to list in session state
                 st.session_state.details.append(details_tag)
+                # transforming the details into pandas dataframe
                 details_df = pd.DataFrame(st.session_state.details)
+                # the dataframe is stored in the session state
                 st.session_state.details_df = details_df
+                # to remove duplicate entries
                 st.session_state.details_df.drop_duplicates(inplace=True)
             st.spinner()  # Hide the spinner
             st.success('Extracted text from the Business Card image successfully')
             st.write('DETAILS OF THE BUSINESS CARD')
-            # displaying the extracted text
+            # displaying the uploaded image
             st.image(biz_card, caption="Uploaded Business Card", width=252, use_column_width=False)
+            # displaying the extracted text
             st.write(details_tag)
+            # displaying the extracted text in form of table
             st.dataframe(st.session_state.details_df)
         if 'details' in st.session_state:
             if st.button('Store the extracted information into SQL database'):
-
+                # assigning the dataframe in the session state to a variable
                 details_df = st.session_state.details_df
-
+                # storing the details in the dataframe to SQL table using for loop
                 for row in details_df.itertuples(index=False):
                     details = (row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10])
 
@@ -196,9 +203,6 @@ def main():
                         continue
                 conn.commit()
                 st.success('Stored the extracted information into SQL database')
-
-    # Add the vertical line between the columns
-    c1.markdown("<div class='vertical-line'></div>", unsafe_allow_html=True)
 
     # column for modifying details stored in SQL table
     with c2:
@@ -226,60 +230,59 @@ def main():
                                        index=0)
             st.session_state.card_holder = card_holder
             # list of details
-            details_list = ['Company_Name', 'Card_Holder_Name', 'Designation', 'Mobile_Number', 'E_mail', 'Website',
+            details_list = ['Company_Name', 'Designation', 'Mobile_Number', 'E_mail', 'Website',
                             'Area', 'City', 'State_or_UT', 'PIN']
             # Multiselect widget to select the details to be changed
             change_details = st.multiselect('SELECT THE DETAILS TO BE CHANGED', details_list, default=[])
             st.session_state.change_details = change_details
 
-        if st.session_state.change_details:
-            # Dictionary to store the new values entered by the user
-            if 'new_values_dict' not in st.session_state:
-                st.session_state.new_values_dict = {}
-
-            # Create text boxes dynamically based on selected details and store the new values in the dictionary
             if st.session_state.change_details:
+                # Dictionary to store the new values entered by the user
+                new_values_dict = {}
+
+                # Create text boxes dynamically based on selected details and store the new values in the dictionary
                 for detail in st.session_state.change_details:
                     new_value = st.text_input(f'Enter new value to be updated for {detail}')
-                    st.session_state.new_values_dict[detail] = new_value
-            # Update the table with the new values
-            if st.button('Update the values') and st.session_state.new_values_dict:
-                for detail, new_value in st.session_state.new_values_dict.items():
-                    # SQL UPDATE query
-                    update_query = f"UPDATE details SET {detail} = %s WHERE Card_Holder_Name = %s"
+                    new_values_dict[detail] = new_value
+                # Update the table with the new values
+                if st.button('Update the values') and new_values_dict:
+                    for detail, new_value in new_values_dict.items():
+                        # SQL UPDATE query
+                        update_query = f"UPDATE details SET {detail} = %s WHERE Card_Holder_Name = %s"
 
-                    # Execute the UPDATE query with the new value
-                    cursor.execute(update_query, (new_value, st.session_state.card_holder))
+                        # Execute the UPDATE query with the new value
+                        cursor.execute(update_query, (new_value, st.session_state.card_holder))
 
-                # Commit the changes to the database
-                conn.commit()
-                st.success('Details updated successfully')
+                    # Commit the changes to the database
+                    conn.commit()
+                    st.success('Details updated successfully')
 
-        st.markdown("<h2 style='text-align: center; font-size: 25px;'>Removing card holder details from SQL table</h2>",
-                    unsafe_allow_html=True)
-        st.write("")
-        if card_holder_rows:
+            st.markdown("<h2 style='text-align: center; font-size: 25px;'>Removing card holder details from SQL "
+                        "table</h2>", unsafe_allow_html=True)
+            st.write("")
+
             # list of cardholders
             card_holders_to_remove = [row[0] for row in card_holder_rows]
             # selection of a cardholder name to modify her or his details
-            card_holder_name_to_remove = st.selectbox('SELECT A CARD HOLDER WHOSE DETAILS ARE TO BE REMOVED',
-                                                      ['None'] + card_holders_to_remove, index=0)
-        if st.button('Remove') and card_holder_name_to_remove:
-            # Execute the DELETE query
-            delete_query = f"DELETE FROM details WHERE Card_Holder_Name = '{card_holder_name_to_remove}'"
-            cursor.execute(delete_query)
+            card_holder_name_to_remove = st.multiselect('SELECT CARD HOLDER(s) WHOSE DETAILS ARE TO BE REMOVED',
+                                                        card_holders_to_remove, default=[])
+            if st.button('Remove') and card_holder_name_to_remove:
+                # Execute the DELETE query
+                for person in card_holder_name_to_remove:
+                    delete_query = f"DELETE FROM details WHERE Card_Holder_Name = '{person}'"
+                    cursor.execute(delete_query)
 
-            # Commit the changes
-            conn.commit()
-            st.success(f'{card_holder_name_to_remove}\'s details removed successfully')
-
-        st.markdown("<h2 style='text-align: center; font-size: 25px;'>To clear the entire SQL table</h2>",
-                    unsafe_allow_html=True)
-        st.write("")
-        if st.button('Click here to clear the table'):
-            cursor.execute('delete from details')
-            conn.commit()
-            st.write('SQL table cleared')
+                # Commit the changes
+                conn.commit()
+                st.success('Selected CARD HOLDER(s)\' details removed successfully')
+            # to clear the entire table
+            st.markdown("<h2 style='text-align: center; font-size: 25px;'>To clear the entire SQL table</h2>",
+                        unsafe_allow_html=True)
+            st.write("")
+            if st.button('Click here to clear the table'):
+                cursor.execute('delete from details')
+                conn.commit()
+                st.write('SQL table cleared')
 
 
 if __name__ == '__main__':
